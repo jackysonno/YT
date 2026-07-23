@@ -1,0 +1,17 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Downloaded media
+downloads/
+*.mp3
+*.mp4
+
+# OS-specific
+.DS_Store
+Thumbs.db
