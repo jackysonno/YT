@@ -1,0 +1,108 @@
+name: YouTube Downloader
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'YouTube Video URL'
+        required: true
+        type: string
+      download_type:
+        description: 'Format to download'
+        required: true
+        default: 'video'
+        type: choice
+        options:
+          - video
+          - audio
+      video_quality:
+        description: 'Video Quality (Only if format is video)'
+        required: false
+        default: 'best'
+        type: choice
+        options:
+          - best
+          - 1080p
+          - 720p
+          - 480p
+          - 360p
+          - worst
+      embed_subtitles:
+        description: 'Embed Subtitles if available (English/Persian)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Setup Deno JS Engine
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python -m pip install --upgrade pip
+          pip install --upgrade https://github.com/yt-dlp/yt-dlp/archive/master.tar.gz
+
+      - name: Decode Base64 Cookies File
+        env:
+          COOKIES_BASE64: ${{ secrets.YOUTUBE_COOKIES }}
+        run: |
+          echo "$COOKIES_BASE64" | base64 -d > cookies.txt
+
+      - name: Create output directory
+        run: mkdir downloads
+
+      - name: Process and Download Content
+        run: |
+          URL="${{ github.event.inputs.url }}"
+          TYPE="${{ github.event.inputs.download_type }}"
+          QUALITY="${{ github.event.inputs.video_quality }}"
+          SUBTITLES="${{ github.event.inputs.embed_subtitles }}"
+
+          COMMON_ARGS="--cookies cookies.txt --remote-components ejs:github --embed-metadata --embed-chapters --embed-thumbnail --convert-thumbnails jpg"
+
+          if [ "$SUBTITLES" = "true" ]; then
+            COMMON_ARGS="$COMMON_ARGS --embed-subs --sub-langs \"en,fa,*-orig\""
+          fi
+
+          if [ "$TYPE" = "audio" ]; then
+            echo "Downloading best available audio in MP3 format with thumbnail, metadata & chapters..."
+            yt-dlp $COMMON_ARGS -x --audio-format mp3 --audio-quality 0 -o "downloads/%(title)s.%(ext)s" "$URL"
+          else
+            echo "Downloading video in MP4 format with thumbnail, metadata, chapters & subtitles..."
+            
+            if [ "$QUALITY" = "worst" ]; then
+              yt-dlp $COMMON_ARGS -f "worstvideo[ext=mp4]+worstaudio[ext=m4a]/worst[ext=mp4]/worst" --merge-output-format mp4 -o "downloads/%(title)s.%(ext)s" "$URL"
+            elif [ "$QUALITY" = "360p" ]; then
+              yt-dlp $COMMON_ARGS -f "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best" --merge-output-format mp4 -o "downloads/%(title)s.%(ext)s" "$URL"
+            elif [ "$QUALITY" = "480p" ]; then
+              yt-dlp $COMMON_ARGS -f "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best" --merge-output-format mp4 -o "downloads/%(title)s.%(ext)s" "$URL"
+            elif [ "$QUALITY" = "720p" ]; then
+              yt-dlp $COMMON_ARGS -f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "downloads/%(title)s.%(ext)s" "$URL"
+            elif [ "$QUALITY" = "1080p" ]; then
+              yt-dlp $COMMON_ARGS -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best" --merge-output-format mp4 -o "downloads/%(title)s.%(ext)s" "$URL"
+            else
+              yt-dlp $COMMON_ARGS -f "bestvideo+bestaudio/best" --merge-output-format mp4 -o "downloads/%(title)s.%(ext)s" "$URL"
+            fi
+          fi
+
+      - name: Upload Downloaded File
+        uses: actions/upload-artifact@v4
+        with:
+          name: youtube-media
+          path: downloads/
