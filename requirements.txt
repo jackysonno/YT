@@ -1,0 +1,5 @@
+# Core dependency - powers all download/extraction logic
+yt-dlp
+
+# Note: ffmpeg must be installed separately as a system binary (see README).
+# It is not a pip package.
