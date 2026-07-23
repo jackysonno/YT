@@ -1,0 +1,95 @@
+name: Dynamic YouTube Downloader
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'YouTube Video URL'
+        required: true
+        default: 'https://www.youtube.com/watch?v=DM8FPq7gs6U'
+      type:
+        description: 'Download Type'
+        required: true
+        default: 'audio'
+        type: choice
+        options:
+          - audio
+          - video
+      quality:
+        description: 'Quality (For Video: 1080p, 720p, 480p / For Audio: best)'
+        required: true
+        default: 'best'
+        type: choice
+        options:
+          - 'best'
+          - '1080p'
+          - '720p'
+          - '480p'
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Tor, FFmpeg & yt-dlp
+        run: |
+          sudo apt update && sudo apt install -y ffmpeg tor
+          sudo service tor start
+          python -m pip install --upgrade pip
+          pip install --upgrade yt-dlp
+
+      - name: Create Cookies File
+        run: |
+          echo "${{ secrets.YOUTUBE_COOKIES }}" > cookies.txt
+
+      - name: Download Content via Tor Proxy
+        run: |
+          URL="${{ github.event.inputs.url }}"
+          TYPE="${{ github.event.inputs.type }}"
+          QUALITY="${{ github.event.inputs.quality }}"
+
+          if [ "$TYPE" = "audio" ]; then
+            echo "Downloading Audio via Proxy..."
+            yt-dlp \
+              --proxy "socks5://127.0.0.1:9050" \
+              --cookies cookies.txt \
+              --extractor-args "youtube:player_client=android,web" \
+              -f "ba/b" \
+              -x --audio-format mp3 \
+              "$URL"
+          else
+            echo "Downloading Video with quality $QUALITY via Proxy..."
+            if [ "$QUALITY" = "best" ]; then
+              FORMAT="bv*+ba/b"
+            elif [ "$QUALITY" = "1080p" ]; then
+              FORMAT="bv*[height<=1080]+ba/b[height<=1080]"
+            elif [ "$QUALITY" = "720p" ]; then
+              FORMAT="bv*[height<=720]+ba/b[height<=720]"
+            else
+              FORMAT="bv*[height<=480]+ba/b[height<=480]"
+            fi
+
+            yt-dlp \
+              --proxy "socks5://127.0.0.1:9050" \
+              --cookies cookies.txt \
+              --extractor-args "youtube:player_client=android,web" \
+              -f "$FORMAT" \
+              --merge-output-format mp4 \
+              "$URL"
+          fi
+
+      - name: Upload Downloaded File
+        uses: actions/upload-artifact@v4
+        with:
+          name: downloaded-media
+          path: |
+            *.mp3
+            *.mp4
