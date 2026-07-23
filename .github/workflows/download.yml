@@ -1,0 +1,63 @@
+name: Download YouTube Media
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "YouTube video URL"
+        required: true
+        type: string
+      type:
+        description: "Output type"
+        required: true
+        type: choice
+        options:
+          - audio
+          - video
+        default: audio
+      quality:
+        description: "Video quality (ignored for audio)"
+        required: false
+        type: choice
+        options:
+          - best
+          - 2160p
+          - 1440p
+          - 1080p
+          - 720p
+          - 480p
+          - 360p
+        default: best
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run downloader
+        run: |
+          if [ "${{ inputs.type }}" = "audio" ]; then
+            python cli.py "${{ inputs.url }}" --type audio --output output
+          else
+            python cli.py "${{ inputs.url }}" --type video --quality "${{ inputs.quality }}" --output output
+          fi
+
+      - name: Upload result as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: downloaded-media
+          path: output/*
+          retention-days: 3
